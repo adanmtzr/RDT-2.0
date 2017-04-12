@@ -36,5 +36,5 @@ void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flag
 int rdt_close(int fildes);
 
 packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum);
-unsigned short getCheckSum(packet cpacket, int length);
+unsigned short getCheckSum(packet cpacket);
 void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum);

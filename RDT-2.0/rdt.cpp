@@ -42,20 +42,7 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 
   // Null terminate end of message.
   //buffer[buffer_length] = '\0';
-	printf("RDT Received buffer  ( **%s**)\n\n\n", buffer);
 
-	unsigned int chksum = 0;
-	chksum = checkSum((unsigned char*)&buffer, strlen(buffer));
-	printf("Calling checsum funct    -> %04X\n", chksum);
-
-
-	//****************************
-
-	printf("RDT RCV packet -> packets->cksum SUPPOSE TO RECEIVED  %04X\n", packets->cksum);
-	if(chksum == packets->cksum){
-	  printf("Server :: The checksum is valid  -> %s\n", packets->data);
-	}
-	//*************************
     return buffer_length;
 }
 
@@ -95,6 +82,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		
 
 	  packets[loopNum] = make_pkt(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+
 	}  
 	
 	//printf("random packet %s\n", &packets[3].data);
@@ -143,7 +131,8 @@ packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 		int dataPoint = (loopNum * 500) + dataLoop;
 		(dataPoint < length) ? hPacket.data[dataLoop] = buffer[dataPoint] : hPacket.data[dataLoop] = '\0';
 	}
-//printf("Packet segment %s\n", hPacket.data);
+	hPacket.cksum = getCheckSum(hPacket);
+	printf("Packet CHECKSUM %04X\n", hPacket.cksum);
 return hPacket;
 	//return packet;
 }
@@ -158,6 +147,17 @@ void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 			buffer[dataPoint] = hPacket.data[dataLoop];
 		}
 	}
+	uint16_t calcCheckSum = getCheckSum(hPacket);	
+	if(calcCheckSum == hPacket.cksum)
+	  {
+
+	    printf("It worked !!!!! Yeahhhh !!\n");
+	  }
+	else {printf("IT exploted ;(\n");
+
+	  printf("********** %d\n", calcCheckSum);
+}
+printf("EXtract packet chceksum  %04X\n",hPacket.cksum );
 
 }
 unsigned short checkSum(unsigned char *addr, int nBytes)
@@ -186,7 +186,7 @@ unsigned short getCheckSum(packet cpacket){
   unsigned short pakCksum;
   cpacket.len = strlen(cpacket.data); 
   //  buff = cpacket.data;
-  pakCksum = checkSum((unsigned char *)cpacket.data, length);
+  pakCksum = checkSum((unsigned char *)cpacket.data, cpacket.len);
   printf("pakCksum    --> %04X", pakCksum);
   return pakCksum;
 
