@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
     //for (;;){
 	int clientAddressSizeHandle = sizeof(caddr);
 	int rdtDataReceived = rdt_recv(rdtHandle, buffer, sizeof(buffer), 0, (struct sockaddr *)&caddr, &clientAddressSizeHandle);
-	//printf("\nPayload: %s\n", buffer);
+	printf("\nPayload: %s\n", buffer);
 	printf("\nPayload buffer length : %lu\n", strlen(buffer));
     //}
     rdt_close(rdtHandle);

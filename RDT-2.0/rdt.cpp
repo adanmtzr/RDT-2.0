@@ -29,16 +29,27 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 	packet* packets = new packet[totalPackets];
 	// get the header from the packets
 
+
+
 	
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
-	{
+	  {
+	    //   memset(packets[0].data, 0, sizeof(packets[loopNum].data));
 		packets[loopNum] = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, packets[loopNum], loopNum);
 	}
 	
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
+	  sequenceNumber++; // increment seq num at the receiving host
 		extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
-	}
+		/*	unsigned short calcCheckSum = checkSum((unsigned char*)packets[loopNum].data, sizeof(packets[loopNum].data));
+		printf("Checksum at rdt recv %04X, At packet %d\n ", calcCheckSum, loopNum);
+		*/
+	}	
+	//printf("Check sum of Pak 0 %04X\n", chek);
+	//s	printf("\npacket # 2  %s\n", packets[1].data);
+	//	printf("\npacket # 3  %s\n", packets[2].data);
+	//	printf("\npacket # 4  %s\n", packets[3].data);
 
   // Null terminate end of message.
   //buffer[buffer_length] = '\0';
@@ -49,6 +60,7 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 packet udp_rcv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length, packet hPacket, int loopNum)
 {
 	char tempBuffer[512];
+	bzero((void *) tempBuffer, 512);
     int didRecieve = recvfrom(socket_descriptor, &tempBuffer, 512, flags, from_address, (socklen_t*)address_length);
 	printf("RDT Received Length %d\n", didRecieve);
     printf("Recieved a packet!\n");
@@ -59,8 +71,9 @@ packet udp_rcv(int socket_descriptor, char *buffer, int buffer_length, int flags
 	}
 	
 	//packet tempPacket;
+	//unsigned short paklen = strlen(hPacket.data);
 
-    memcpy(&hPacket, tempBuffer, 512);
+	memcpy(&hPacket, tempBuffer, 512);
 	//printf("Packet segment %s\n", hPacket.data);
 	return hPacket;
 }
@@ -69,7 +82,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	uint32_t sequenceNumber = 0;
 	//	char pakBuffer[500];  
 	// Figure out how many packets
-  
+ 
 	int totalPackets = ceil((double)buffer_length/500);
 	//int totalPackets = (buffer_length + 500 - 1) / 500;
 	printf("Buffer length %d\n", buffer_length);
@@ -79,18 +92,20 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	// Make every packet
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
-		
-
+	  sequenceNumber++; // increment sequence 
 	  packets[loopNum] = make_pkt(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+	
 
 	}  
-	
-	//printf("random packet %s\n", &packets[3].data);
-	
+	//	printf("Packet #1  %s\n", packets[0].data);
+	//	printf("\npacket # 2  %s\n", packets[1].data);
+	//	printf("\npacket # 3  %s\n", packets[2].data);
+	//	printf("\npacket # 4  %s\n", packets[3].data);
+
 	// Send every packet
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
-	    // pakBuffer[loopNum] = packets->data[loopNum];
+	
 	    udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
 	}
 
@@ -107,6 +122,7 @@ void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flag
 	{
 		printf("Error sending packet");
 	}
+
 }
 
 int rdt_close(int fildes) {
@@ -121,24 +137,35 @@ int rdt_close(int fildes) {
 
 packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
 {
-	//uint32_t* packet = (uint32_t*)malloc(sizeof(packet_t)+length);
-	//(*(packet_t)packet).seq_number= seqNo;
-	//memcpy(packet + sizeof(packet_t), buffer, length);
-	
+  //  unsigned short paklen = strlen(hPacket.data);
+  // bzero((void *)&hPacket.data, paklen);	
+
+  //    hPacket.len = strlen(hPacket.data);
+  // memset(&(hPacket.data), 0, hPacket.len);
+
 	// Attach data to packet
 	for(int dataLoop = 0; dataLoop < 500; dataLoop++)
 	{
+	  hPacket.data[dataLoop] = '\0';
 		int dataPoint = (loopNum * 500) + dataLoop;
 		(dataPoint < length) ? hPacket.data[dataLoop] = buffer[dataPoint] : hPacket.data[dataLoop] = '\0';
+	
 	}
+		hPacket.seqno = seqNo;
+	//	printf("Making sequence number %d\n", hPacket.seqno);
 	hPacket.cksum = getCheckSum(hPacket);
-	printf("Packet CHECKSUM %04X\n", hPacket.cksum);
+	printf("make_pkt func  hPacket.cksum >>>>>   %04X  at packet %d\n", hPacket.cksum, seqNo);
+  
+  // memcpy(hPacket.data, buffer, sizeof(hPacket));
 return hPacket;
 	//return packet;
 }
 void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
 {
 	//extract packets
+  // bzero((void *)buffer, length);
+  //  hPacket.len = strlen(hPacket.data);
+  //   memset(&(hPacket.data), 0, hPacket.len);
 	for(int dataLoop = 0; dataLoop < 500; dataLoop++)
 	{
 		int dataPoint = loopNum * 500 + dataLoop;
@@ -147,19 +174,34 @@ void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 			buffer[dataPoint] = hPacket.data[dataLoop];
 		}
 	}
-	uint16_t calcCheckSum = getCheckSum(hPacket);	
+
+	
+	unsigned short calcCheckSum = getCheckSum(hPacket);	
 	if(calcCheckSum == hPacket.cksum)
 	  {
-
-	    printf("It worked !!!!! Yeahhhh !!\n");
+	    
+	    printf("****Succeessful: Packet arrived !!****\n");
 	  }
-	else {printf("IT exploted ;(\n");
+	else {printf("\t--> :(  Error: Loss packet. Please resend the missing packet. ): \n");
+	  //  printf("Packet data thats it is bad  :::: %s", hPacket.data);
+	  printf("****calcCheckSum ****** %04X\n", calcCheckSum);
+	  // printf("****hPacket.cksum at the extract funct **** %04X\n", hPacket.cksum);
+	   //   printf("Sequence Number = %d ", hPacket.seqno);
+	}
+	
+	printf("EXtract funct hPacket.cksum ==>  %04X\n",hPacket.cksum );
+		if(hPacket.seqno == seqNo)
+	  {
+	     printf("####Sequence Number is Valid### %d\n", seqNo );
 
-	  printf("********** %d\n", calcCheckSum);
+	  }
+	  	else
+	  {
+	    printf("&&&Sequence Number is INValid&&&&  %d\n", seqNo );
+	  }
+	
 }
-printf("EXtract packet chceksum  %04X\n",hPacket.cksum );
 
-}
 unsigned short checkSum(unsigned char *addr, int nBytes)
 {
   unsigned int sum = 0;
@@ -178,16 +220,21 @@ unsigned short checkSum(unsigned char *addr, int nBytes)
   //Fold 32-bit to 16-bits
   while(sum >> 16) 
     sum = (sum & 0XFFFF)+(sum >> 16);
-  //  printf("CheckSum value at the function is = *** %04X\n\n", sum);
+  //  printf("\tYour CheckSum  ++++> %04X \n",((unsigned short)~sum));
   return ((unsigned short)~sum );
 }
+
+
+//calculates the Checksum of the given packet
 unsigned short getCheckSum(packet cpacket){
-  //  unsigned char *buff;
+
   unsigned short pakCksum;
   cpacket.len = strlen(cpacket.data); 
-  //  buff = cpacket.data;
+
+  cpacket.len = 500;
   pakCksum = checkSum((unsigned char *)cpacket.data, cpacket.len);
-  printf("pakCksum    --> %04X", pakCksum);
+  printf("getCheckSum funct pakCksum    --> %04X\n", pakCksum);
   return pakCksum;
 
 }
+
