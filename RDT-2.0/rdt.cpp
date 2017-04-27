@@ -23,36 +23,29 @@ int rdt_bind(int socket_descriptor, const struct sockaddr *local_address, sockle
 int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length) {
     // TODO: Recieve multiple packets and store in buffer
 	uint32_t sequenceNumber = 0;
-	
+
+
 	int totalPackets = ceil((double)buffer_length/500);
 	//int totalPackets = (buffer_length + 500 - 1) / 500;
 	packet* packets = new packet[totalPackets];
 	// get the header from the packets
 
-
-
-	
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	  {
-	    //   memset(packets[0].data, 0, sizeof(packets[loopNum].data));
+
 		packets[loopNum] = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, packets[loopNum], loopNum);
-	}
+
+	  }
+
 	
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
 	  sequenceNumber++; // increment seq num at the receiving host
-		extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
-		/*	unsigned short calcCheckSum = checkSum((unsigned char*)packets[loopNum].data, sizeof(packets[loopNum].data));
-		printf("Checksum at rdt recv %04X, At packet %d\n ", calcCheckSum, loopNum);
-		*/
+	  extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+	 
 	}	
-	//printf("Check sum of Pak 0 %04X\n", chek);
-	//s	printf("\npacket # 2  %s\n", packets[1].data);
-	//	printf("\npacket # 3  %s\n", packets[2].data);
-	//	printf("\npacket # 4  %s\n", packets[3].data);
-
-  // Null terminate end of message.
-  //buffer[buffer_length] = '\0';
+	// Null terminate end of message.
+	//buffer[buffer_length] = '\0';
 
     return buffer_length;
 }
@@ -80,9 +73,9 @@ packet udp_rcv(int socket_descriptor, char *buffer, int buffer_length, int flags
 int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr * destination_address, int address_length) {
     // TODO: Send multiple packets over socket
 	uint32_t sequenceNumber = 0;
-	//	char pakBuffer[500];  
 	// Figure out how many packets
- 
+	char *storePackets[4];
+	bzero(&storePackets, 4);
 	int totalPackets = ceil((double)buffer_length/500);
 	//int totalPackets = (buffer_length + 500 - 1) / 500;
 	printf("Buffer length %d\n", buffer_length);
@@ -94,11 +87,11 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	{
 	  sequenceNumber++; // increment sequence 
 	  packets[loopNum] = make_pkt(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
-	
 
+	 
 	}  
 	//	printf("Packet #1  %s\n", packets[0].data);
-	//	printf("\npacket # 2  %s\n", packets[1].data);
+		printf("\npacket seq# at pak 2 is  %d\n", packets[1].seqno);
 	//	printf("\npacket # 3  %s\n", packets[2].data);
 	//	printf("\npacket # 4  %s\n", packets[3].data);
 
@@ -106,8 +99,45 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
 	
-	    udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
+	  udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);  
+
+	    	 // set up select
+	fd_set set;
+	struct timeval timeout;
+	char *receiAckBuffer[1];
+	bzero(receiAckBuffer,1);
+	// initialize timeout data structure
+       	timeout.tv_sec = 3;
+	timeout.tv_usec = 0;
+	/*if times out select return 0, input available select return 1,
+	  if an error select return -1*/
+	while(true)
+	  {
+	  //initialize file descriptor
+	  FD_ZERO(&set);
+	  FD_SET(socket_descriptor, &set);
+	    int resultSelect = select(socket_descriptor, &set, NULL, NULL, &timeout);
+	
+	  if(resultSelect == -1)
+	    {// error
+	      printf("Select() **Error ** \n");
+	      exit(1);
+	    }
+	  else  if(resultSelect == 0)
+	    {
+	      //it times out
+	      printf("Select() TIMEOUTS** \n");
+
+	    }
+	  else if(resultSelect == 1)
+	    {// there is no timeout
+	      printf("Select() IS GOOD** \n");
+
+	    }
+
+	  }// end while
 	}
+
 
     return buffer_length;
 }
@@ -137,11 +167,6 @@ int rdt_close(int fildes) {
 
 packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
 {
-  //  unsigned short paklen = strlen(hPacket.data);
-  // bzero((void *)&hPacket.data, paklen);	
-
-  //    hPacket.len = strlen(hPacket.data);
-  // memset(&(hPacket.data), 0, hPacket.len);
 
 	// Attach data to packet
 	for(int dataLoop = 0; dataLoop < 500; dataLoop++)
@@ -154,18 +179,17 @@ packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 		hPacket.seqno = seqNo;
 	//	printf("Making sequence number %d\n", hPacket.seqno);
 	hPacket.cksum = getCheckSum(hPacket);
+	hPacket.ackno = seqNo+1;
 	printf("make_pkt func  hPacket.cksum >>>>>   %04X  at packet %d\n", hPacket.cksum, seqNo);
-  
-  // memcpy(hPacket.data, buffer, sizeof(hPacket));
+	printf("make_pkt func  hPacket.ackno >>>>>   %d  at packet %d\n", hPacket.ackno, seqNo);  
+
 return hPacket;
 	//return packet;
 }
 void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
 {
 	//extract packets
-  // bzero((void *)buffer, length);
-  //  hPacket.len = strlen(hPacket.data);
-  //   memset(&(hPacket.data), 0, hPacket.len);
+
 	for(int dataLoop = 0; dataLoop < 500; dataLoop++)
 	{
 		int dataPoint = loopNum * 500 + dataLoop;
@@ -189,15 +213,15 @@ void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 	   //   printf("Sequence Number = %d ", hPacket.seqno);
 	}
 	
-	printf("EXtract funct hPacket.cksum ==>  %04X\n",hPacket.cksum );
+	//	printf("EXtract funct hPacket.cksum ==>  %04X\n",hPacket.cksum );
 		if(hPacket.seqno == seqNo)
 	  {
-	     printf("####Sequence Number is Valid### %d\n", seqNo );
+	     printf("\t **Sequence Number is Valid** %d\n", seqNo );
 
 	  }
 	  	else
 	  {
-	    printf("&&&Sequence Number is INValid&&&&  %d\n", seqNo );
+	    printf("\t\t !!!! Sequence Number is INValid!!!!!!  %d\n", seqNo );
 	  }
 	
 }
@@ -237,4 +261,5 @@ unsigned short getCheckSum(packet cpacket){
   return pakCksum;
 
 }
+
 
