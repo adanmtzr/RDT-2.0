@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <arpa/inet.h>
@@ -39,4 +40,4 @@ int rdt_close(int fildes);
 packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum);
 unsigned short getCheckSum(packet cpacket);
 int setSequence(packet sPacket);
-void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum);
+packet extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum);
