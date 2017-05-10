@@ -20,6 +20,10 @@ int rdt_bind(int socket_descriptor, const struct sockaddr *local_address, sockle
     return didBind;
 }
 
+/*
+
+***************RDT RECEIVED*********************
+*/
 int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length) {
     // TODO: Recieve multiple packets and store in buffer
 	uint32_t sequenceNumber = 0;
@@ -30,23 +34,83 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 	packet* packets = new packet[totalPackets];
 	// get the header from the packets
 
+
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	  {
 
-		packets[loopNum] = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, packets[loopNum], loopNum);
+	    sequenceNumber++;
+	    	packets[loopNum] = udp_rcv(socket_descriptor, buffer, buffer_length, flags, 
+	   		   from_address, address_length, packets[loopNum], loopNum);
+       	extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+ // set up select
+	  fd_set set;
+	  struct timeval timeout;
+	  char receiAckBuffer[1];
+	  bzero(receiAckBuffer,1);
+	  // initialize timeout data structure
+	  timeout.tv_sec = 5;
+	  timeout.tv_usec = 0;
+	  int count=0;
+	  //  if times out select return 0, input available select return 1,
+	  // if an error select return -1
 
+	  // printf("Sending to the client %s receiAck outside /n", receiAckBuffer);
+	  //	  printf("Server ack received %d \n", recAck);
+	  while(true)
+	    {
+	      //    packets[loopNum] = udp_rcv(socket_descriptor, buffer, buffer_length,
+	      //			 flags, from_address, address_length, packets[loopNum], loopNum);
+	      int recAck = packets[loopNum].ackno;
+	      receiAckBuffer[0] = recAck;
+	      //initialize file descriptor
+	      FD_ZERO(&set);
+	      FD_SET(socket_descriptor, &set);
+	      int resultSelect = select(socket_descriptor, &set, NULL, NULL, &timeout);
+	      
+	      if(resultSelect == -1)
+		{// error
+		  printf(" Server Select() **Error ** \n");
+		  exit(1);
+		}
+	      
+	      else  if(resultSelect == 0)
+		{
+		  count++;
+		  //it times out
+		  printf("Server Select() TIMEOUTS** \n");
+		  if(count == 3)
+		    exit(1);
+		    }
+	      else if(FD_ISSET(socket_descriptor, &set))
+		{// there is no timeout
+		  printf("Server Select(1) %s \n", receiAckBuffer);
+		  printf("Server Select() IS GOOD** \n");
+		 extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+		 memset(packets[loopNum].data, 0, packets->len);
+		 packets[loopNum].seqno = sequenceNumber;
+		 read(socket_descriptor, receiAckBuffer, sizeof(receiAckBuffer));
+		 printf("Received this sequence number fromclient %d \n", packets[loopNum].seqno);
+		 		 	     
+
+		}
+
+	    }// end while
 	  }
-
-	
+	/*
+		
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
 	  sequenceNumber++; // increment seq num at the receiving host
-	  extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+	  // extract_pk(buffer, buffer_length, sequenceNumber, packets[loopNum], loopNum);
+
 	 
-	}	
+
+
+	  }*/
+		
 	// Null terminate end of message.
 	//buffer[buffer_length] = '\0';
-
+	
     return buffer_length;
 }
 
@@ -74,8 +138,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
     // TODO: Send multiple packets over socket
 	uint32_t sequenceNumber = 0;
 	// Figure out how many packets
-	char *storePackets[4];
-	bzero(&storePackets, 4);
+
 	int totalPackets = ceil((double)buffer_length/500);
 	//int totalPackets = (buffer_length + 500 - 1) / 500;
 	printf("Buffer length %d\n", buffer_length);
@@ -91,7 +154,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	 
 	}  
 	//	printf("Packet #1  %s\n", packets[0].data);
-		printf("\npacket seq# at pak 2 is  %d\n", packets[1].seqno);
+	//	printf("\npacket seq# at pak 2 is  %d\n", packets[1].seqno);
 	//	printf("\npacket # 3  %s\n", packets[2].data);
 	//	printf("\npacket # 4  %s\n", packets[3].data);
 
@@ -99,16 +162,20 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	for(int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
 	
-	  udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);  
+	  udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]); 
 
 	    	 // set up select
 	fd_set set;
 	struct timeval timeout;
-	char *receiAckBuffer[1];
+	int rec;
+	int counter=0;
+	char receiAckBuffer[1];
 	bzero(receiAckBuffer,1);
 	// initialize timeout data structure
-       	timeout.tv_sec = 3;
+       	timeout.tv_sec = 5;
 	timeout.tv_usec = 0;
+
+	int current_ack_send = packets[loopNum].ackno;
 	/*if times out select return 0, input available select return 1,
 	  if an error select return -1*/
 	while(true)
@@ -125,14 +192,38 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	    }
 	  else  if(resultSelect == 0)
 	    {
+	      counter++;
 	      //it times out
 	      printf("Select() TIMEOUTS** \n");
+	      //resend packets since the last dropped
+	      for(int i = current_ack_send; i < totalPackets; i++)
+		{
 
+		  udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[i]);
+		  printf("retransmiting packect \n"); 
+		}
+	       timeout.tv_sec = 3;
+	       timeout.tv_usec = 0;
+	       if(counter == 3)
+		 exit(1);
 	    }
-	  else if(resultSelect == 1)
+       	
+	  else if(FD_ISSET(socket_descriptor, &set))
 	    {// there is no timeout
 	      printf("Select() IS GOOD** \n");
+	      int rec = recv(socket_descriptor, receiAckBuffer, sizeof(receiAckBuffer), 0);
 
+	      if(rec == current_ack_send)
+		{
+		  printf("Received from Server %s\n", receiAckBuffer);
+
+		}
+	      for(int i = current_ack_send; i < totalPackets; i++)
+		{
+
+		  udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[i]);
+		  printf("retransmiting packect \n"); 
+		}
 	    }
 
 	  }// end while
@@ -144,9 +235,20 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 
 void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr * destination_address, int address_length, packet* hPacket)
 {
+  /*  //simulate packet Corruption
+  time_t t;
+  int randNum;
+  // initize the random number
+  srand((unsigned) time(&t));
+
+  // random number between 0 and 1999
+  randNum = rand()%2000;
+  printf("Random number generated %d\n", randNum);
+  */
+
 	//printf("Packet segment %s", hPacket.data);
 	//printf("Packet segment %s\n", hPacket->data);
-
+  
 	int didSend = sendto(socket_descriptor, hPacket, 512, flags, destination_address, address_length);
 	if (didSend == -1)
 	{
@@ -179,14 +281,14 @@ packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 		hPacket.seqno = seqNo;
 	//	printf("Making sequence number %d\n", hPacket.seqno);
 	hPacket.cksum = getCheckSum(hPacket);
-	hPacket.ackno = seqNo+1;
+	hPacket.ackno = seqNo;
 	printf("make_pkt func  hPacket.cksum >>>>>   %04X  at packet %d\n", hPacket.cksum, seqNo);
 	printf("make_pkt func  hPacket.ackno >>>>>   %d  at packet %d\n", hPacket.ackno, seqNo);  
 
 return hPacket;
 	//return packet;
 }
-void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
+packet extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
 {
 	//extract packets
 
@@ -210,9 +312,9 @@ void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 	  //  printf("Packet data thats it is bad  :::: %s", hPacket.data);
 	  printf("****calcCheckSum ****** %04X\n", calcCheckSum);
 	  // printf("****hPacket.cksum at the extract funct **** %04X\n", hPacket.cksum);
-	   //   printf("Sequence Number = %d ", hPacket.seqno);
+	 
 	}
-	
+	    printf("Packet hPacket Sequence Number = %d ", hPacket.seqno);
 	//	printf("EXtract funct hPacket.cksum ==>  %04X\n",hPacket.cksum );
 		if(hPacket.seqno == seqNo)
 	  {
@@ -221,9 +323,9 @@ void extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 	  }
 	  	else
 	  {
-	    printf("\t\t !!!! Sequence Number is INValid!!!!!!  %d\n", seqNo );
+	    printf("\t\t !!!! INValid Sequence Number !!!!!!  %d\n", seqNo );
 	  }
-	
+		return hPacket;	
 }
 
 unsigned short checkSum(unsigned char *addr, int nBytes)
