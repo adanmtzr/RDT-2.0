@@ -41,7 +41,8 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 
 	while (packetCountdown > 0)
 	{
-		packet tPacket = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, tPacket, 0);
+	 
+	  packet tPacket = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, tPacket, 0);
 		printf("new pack seq no %d\n", tPacket.seqno);
 		if (packets[tPacket.seqno].ackno != 1)
 		{
@@ -98,11 +99,15 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	{
 		packets[loopNum] = make_pkt(buffer, buffer_length, loopNum, packets[loopNum], loopNum);
 	}
-
+	
 	// Send every packet
 	for (int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
-		udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
+	  
+	 
+	  udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, 
+		     address_length, &packets[loopNum], loopNum);
+	  
 	}
 
 	int ackCountdown = totalPackets;
@@ -138,27 +143,40 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 	return buffer_length;
 }
 
-void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length, packet *hPacket)
+void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length, packet *hPacket, int loopNum)
 {
-	/*  //simulate packet Corruption
-  time_t t;
-  int randNum;
-  // initize the random number
-  srand((unsigned) time(&t));
+	//*****************************
+	//simulate packet Corruption
+	time_t t;
+	// initize the random number
+	srand((unsigned) time(&t));
+	int randPacket = rand()%6;
+	printf("random packet %d\n", randPacket);
+	int randNum;
 
-  // random number between 0 and 1999
-  randNum = rand()%2000;
-  printf("Random number generated %d\n", randNum);
-  */
-
+	// random number between 0 and 499
+	randNum = rand()%499;
+	printf("Random number generated %d\n", randNum);
+	//*******************************
+	if(randPacket == loopNum)
+	    {
+	      hPacket->data[randNum] = '*';
+	      int didSend = sendto(socket_descriptor, hPacket, 512, flags, destination_address, address_length);
+	      if (didSend == -1)
+		{
+		  printf("Error sending packet");
+		}
+	    }
 	//printf("Packet segment %s", hPacket.data);
 	//printf("Packet segment %s\n", hPacket->data);
-
-	int didSend = sendto(socket_descriptor, hPacket, 512, flags, destination_address, address_length);
-	if (didSend == -1)
-	{
+	else 
+	  {
+	    int didSend = sendto(socket_descriptor, hPacket, 512, flags, destination_address, address_length);
+	    if (didSend == -1)
+	      {
 		printf("Error sending packet");
-	}
+	      }
+	  }
 }
 
 int rdt_close(int fildes)
@@ -210,28 +228,22 @@ packet extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int 
 	}
 
 	unsigned short calcCheckSum = getCheckSum(hPacket);
-	if (calcCheckSum == hPacket.cksum)
+	if (calcCheckSum == hPacket.cksum && hPacket.seqno == seqNo)
 	{
 
 		printf("****Succeessful: Packet arrived !!****\n");
-	}
-	else
-	{
-		printf("\t--> :(  Error: Loss packet. Please resend the missing packet. ): \n");
-		//  printf("Packet data thats it is bad  :::: %s", hPacket.data);
-		printf("****calcCheckSum ****** %04X\n", calcCheckSum);
-		// printf("****hPacket.cksum at the extract funct **** %04X\n", hPacket.cksum);
-	}
-	printf("Packet hPacket Sequence Number = %d ", hPacket.seqno);
-	//	printf("EXtract funct hPacket.cksum ==>  %04X\n",hPacket.cksum );
-	if (hPacket.seqno == seqNo)
-	{
 		printf("\t **Sequence Number is Valid** %d\n", seqNo);
 	}
 	else
 	{
-		printf("\t\t !!!! INValid Sequence Number !!!!!!  %d\n", seqNo);
+		printf("\t--> :(  Error: Loss packet. Please resend the missing packet. ): \n");
+		hPacket.seqno = seqNo -1;
+
+		printf("****Last Good Packet was ==> %d\n", hPacket.seqno);
+	
 	}
+	//	printf("Packet hPacket Sequence Number = %d ", hPacket.seqno);
+
 	return hPacket;
 }
 

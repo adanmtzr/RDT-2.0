@@ -33,7 +33,7 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 packet udp_rcv(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *from_address, int *address_length, packet hPacket, int loopNum);
 
 int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length);
-void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length, packet* hPacket);
+void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length, packet* hPacket, int loopNum);
 // complete
 int rdt_close(int fildes);
 
