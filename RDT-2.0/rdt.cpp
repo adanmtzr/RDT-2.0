@@ -50,7 +50,19 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 	{
 		packet tPacket = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, tPacket, 0);
 		//printf("new pack seq no %d\n", tPacket.seqno);
-		if (packets[tPacket.seqno].ackno != 1)
+
+		unsigned short calcCheckSum = getCheckSum(tPacket);
+		bool goodPacket = true;
+
+		printf("Checksums %d::%d\n", calcCheckSum, tPacket.cksum);
+
+		if (calcCheckSum != tPacket.cksum)
+		{
+			printf(ANSI_COLOR_RED "Error: Corrupt packet\n" ANSI_COLOR_RESET);
+			goodPacket = false;
+		}
+
+		if (packets[tPacket.seqno].ackno != 1 && goodPacket == true)
 		{
 			packetCountdown--;
 			packets[tPacket.seqno] = tPacket;
@@ -70,7 +82,7 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 		extract_pk(buffer, buffer_length, loopNum, packets[loopNum], loopNum);
 	}
 
-	printf("Recieved all packets!");
+	printf(ANSI_COLOR_GREEN "Recieved all packets!\n" ANSI_COLOR_RESET);
 
 	return buffer_length;
 }
@@ -106,9 +118,20 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		packets[loopNum] = make_pkt(buffer, buffer_length, loopNum, packets[loopNum], loopNum);
 	}
 
+	char correctChar = packets[1].data[100];
+
 	if (testOption == 1)
 	{
-		printf("Sending packets out of order\n");
+		printf(ANSI_COLOR_BLUE "Sending packets out of order\n" ANSI_COLOR_RESET);
+	}
+	if (testOption == 2)
+	{
+		printf(ANSI_COLOR_BLUE "Dropping packet\n" ANSI_COLOR_RESET);
+	}
+	if (testOption == 3)
+	{
+		printf(ANSI_COLOR_BLUE "Corrupting packet\n" ANSI_COLOR_RESET);
+		packets[1].data[100] = '\n';
 	}
 
 	// Send every packet
@@ -125,9 +148,7 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		}
 		if (testOption == 2)
 		{
-			if (loopNum == 1)
-				printf("Packet dropped\n");
-			else
+			if (loopNum != 1)
 				udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
 		}
 		else
@@ -136,10 +157,15 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		}
 	}
 
+	if (testOption == 3)
+	{
+		packets[1].data[100] = correctChar;
+	}
+
 	int ackCountdown = totalPackets;
 	int totalTimeouts = 3;
 
-	while (ackCountdown > 0 && totalTimeouts > 0)
+	while (ackCountdown > 0 && totalTimeouts >= 0)
 	{
 		struct timeval timeout;
 		fd_set set;
@@ -191,7 +217,14 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		}
 	}
 
-	printf("Recieved all acknowledgements!\n");
+	if (totalTimeouts < 0)
+	{
+		printf("Error timed out too many times.\n");
+	}
+	else
+	{
+		printf(ANSI_COLOR_GREEN "Recieved all acknowledgements!\n" ANSI_COLOR_RESET);
+	}
 
 	return buffer_length;
 }
@@ -246,17 +279,6 @@ packet extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int 
 		{
 			buffer[dataPoint] = hPacket.data[dataLoop];
 		}
-	}
-
-	unsigned short calcCheckSum = getCheckSum(hPacket);
-	if (calcCheckSum == hPacket.cksum)
-	{
-
-		printf("Good packet\n");
-	}
-	else
-	{
-		printf("Error: Loss packet\n");
 	}
 
 	return hPacket;
