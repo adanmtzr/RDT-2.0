@@ -10,9 +10,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
-#include <math.h>  
+#include <math.h>
 
 struct packet {
     uint16_t cksum; /* Ack and Data */
@@ -22,6 +23,7 @@ struct packet {
     char data[500]; /* Data only; Not always 500 bytes, can be less */
 };
 typedef struct packet packet_t;
+void changeTest(int testNum);
 unsigned short checkSum(unsigned char *addr, int nBytes);
 // complete
 int rdt_socket(int address_family, int type, int protocol);

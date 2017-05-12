@@ -1,5 +1,12 @@
 #include "rdt.h"
 
+static int testOption = 0;
+
+void changeTest(int testNum)
+{
+	testOption = testNum;
+}
+
 int rdt_socket(int address_family, int type, int protocol)
 {
 	int didUDPSocket = socket(address_family, type, protocol);
@@ -42,7 +49,7 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 	while (packetCountdown > 0)
 	{
 		packet tPacket = udp_rcv(socket_descriptor, buffer, buffer_length, flags, from_address, address_length, tPacket, 0);
-		printf("new pack seq no %d\n", tPacket.seqno);
+		//printf("new pack seq no %d\n", tPacket.seqno);
 		if (packets[tPacket.seqno].ackno != 1)
 		{
 			packetCountdown--;
@@ -55,7 +62,7 @@ int rdt_recv(int socket_descriptor, char *buffer, int buffer_length, int flags, 
 
 			sendto(socket_descriptor, ackPacket, 512, flags, from_address, (socklen_t)*address_length);
 		}
-		printf("packets left: %d\n", packetCountdown);
+		//printf("packets left: %d\n", packetCountdown);
 	}
 
 	for (int loopNum = 0; loopNum < totalPackets; loopNum++)
@@ -73,7 +80,7 @@ packet udp_rcv(int socket_descriptor, char *buffer, int buffer_length, int flags
 	char tempBuffer[512];
 	bzero((void *)tempBuffer, 512);
 	int didRecieve = recvfrom(socket_descriptor, &tempBuffer, 512, flags, from_address, (socklen_t *)address_length);
-	printf("RDT Received Length %d\n", didRecieve);
+	//printf("RDT Received Length %d\n", didRecieve);
 	printf("Recieved a packet!\n");
 
 	if (didRecieve == -1)
@@ -99,38 +106,89 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 		packets[loopNum] = make_pkt(buffer, buffer_length, loopNum, packets[loopNum], loopNum);
 	}
 
+	if (testOption == 1)
+	{
+		printf("Sending packets out of order\n");
+	}
+
 	// Send every packet
 	for (int loopNum = 0; loopNum < totalPackets; loopNum++)
 	{
-		udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
+		if (testOption == 1)
+		{
+			if (loopNum == 1)
+				udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum + 1]);
+			else if (loopNum == 2)
+				udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum - 1]);
+			else
+				udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
+		}
+		if (testOption == 2)
+		{
+			if (loopNum == 1)
+				printf("Packet dropped\n");
+			else
+				udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
+		}
+		else
+		{
+			udt_sendto(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, &packets[loopNum]);
+		}
 	}
 
 	int ackCountdown = totalPackets;
+	int totalTimeouts = 3;
 
-	while (ackCountdown > 0)
+	while (ackCountdown > 0 && totalTimeouts > 0)
 	{
-		char tempBuffer[512];
-		bzero((void *)tempBuffer, 512);
-		printf("made it0\n");
-		//int didRecieve = recvfrom(socket_descriptor, &tempBuffer, 512, flags, from_address, (socklen_t *)address_length);
-		int didRecieveAck = recvfrom(socket_descriptor, &tempBuffer, 512, flags, destination_address, (socklen_t *)&address_length);
-		if (didRecieveAck == -1)
-		{
-			printf("Could not get ack.\n");
-			return 0;
-		}
+		struct timeval timeout;
+		fd_set set;
 
-		packet *tPacket = new packet;
-		memcpy(tPacket, tempBuffer, 512);
+		timeout.tv_sec = 3;
+		timeout.tv_usec = 0;
 
-		//packet tPacket = udp_rcv(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, tPacket, 0);
-		printf("new pack seq no %d\n", tPacket->seqno);
-		if (packets[tPacket->seqno].ackno != 1)
+		FD_ZERO(&set);
+		FD_SET(socket_descriptor, &set);
+
+		int resultSet = select(socket_descriptor + 1, &set, NULL, NULL, &timeout);
+
+		if (resultSet == 1)
 		{
-			ackCountdown--;
-			packets[tPacket->seqno].ackno = 0;
+			char tempBuffer[512];
+			bzero((void *)tempBuffer, 512);
+			//printf("made it0\n");
+			//int didRecieve = recvfrom(socket_descriptor, &tempBuffer, 512, flags, from_address, (socklen_t *)address_length);
+			int didRecieveAck = recvfrom(socket_descriptor, &tempBuffer, 512, flags, destination_address, (socklen_t *)&address_length);
+			if (didRecieveAck == -1)
+			{
+				printf("Could not get ack.\n");
+				return 0;
+			}
+
+			packet *tPacket = new packet;
+			memcpy(tPacket, tempBuffer, 512);
+
+			//packet tPacket = udp_rcv(socket_descriptor, buffer, buffer_length, flags, destination_address, address_length, tPacket, 0);
+			//printf("new pack seq no %d\n", tPacket->seqno);
+			if (packets[tPacket->seqno].ackno != 1)
+			{
+				ackCountdown--;
+				packets[tPacket->seqno].ackno = 0;
+			}
+			printf("acks left: %d\n", ackCountdown);
 		}
-		printf("acks left: %d\n", ackCountdown);
+		else
+		{
+			totalTimeouts--;
+			for (int loopNum = 0; loopNum < totalPackets; loopNum++)
+			{
+				if (packets[loopNum].ackno != 1)
+				{
+					sendto(socket_descriptor, &packets[loopNum], 512, flags, destination_address, address_length);
+				}
+			}
+			//timeout.tv_sec = 3;
+		}
 	}
 
 	printf("Recieved all acknowledgements!\n");
@@ -186,15 +244,10 @@ packet make_pkt(char *buffer, int length, uint32_t seqNo, packet hPacket, int lo
 		(dataPoint < length) ? hPacket.data[dataLoop] = buffer[dataPoint] : hPacket.data[dataLoop] = '\0';
 	}
 	hPacket.seqno = seqNo;
-	//	printf("Making sequence number %d\n", hPacket.seqno);
 	hPacket.cksum = getCheckSum(hPacket);
-	//hPacket.ackno = seqNo;
 	hPacket.ackno = 0;
-	printf("make_pkt func  hPacket.cksum >>>>>   %04X  at packet %d\n", hPacket.cksum, seqNo);
-	printf("make_pkt func  hPacket.ackno >>>>>   %d  at packet %d\n", hPacket.ackno, seqNo);
 
 	return hPacket;
-	//return packet;
 }
 packet extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int loopNum)
 {
@@ -213,25 +266,13 @@ packet extract_pk(char *buffer, int length, uint32_t seqNo, packet hPacket, int 
 	if (calcCheckSum == hPacket.cksum)
 	{
 
-		printf("****Succeessful: Packet arrived !!****\n");
+		printf("Good packet\n");
 	}
 	else
 	{
-		printf("\t--> :(  Error: Loss packet. Please resend the missing packet. ): \n");
-		//  printf("Packet data thats it is bad  :::: %s", hPacket.data);
-		printf("****calcCheckSum ****** %04X\n", calcCheckSum);
-		// printf("****hPacket.cksum at the extract funct **** %04X\n", hPacket.cksum);
+		printf("Error: Loss packet\n");
 	}
-	printf("Packet hPacket Sequence Number = %d ", hPacket.seqno);
-	//	printf("EXtract funct hPacket.cksum ==>  %04X\n",hPacket.cksum );
-	if (hPacket.seqno == seqNo)
-	{
-		printf("\t **Sequence Number is Valid** %d\n", seqNo);
-	}
-	else
-	{
-		printf("\t\t !!!! INValid Sequence Number !!!!!!  %d\n", seqNo);
-	}
+
 	return hPacket;
 }
 
@@ -266,6 +307,5 @@ unsigned short getCheckSum(packet cpacket)
 
 	cpacket.len = 500;
 	pakCksum = checkSum((unsigned char *)cpacket.data, cpacket.len);
-	printf("getCheckSum funct pakCksum    --> %04X\n", pakCksum);
 	return pakCksum;
 }
