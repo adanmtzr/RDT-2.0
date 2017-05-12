@@ -16,6 +16,11 @@ int main(int argc, char *argv[])
 		exit(0);
 	}
 
+	// Test 0 nothing
+	// Test 1 out of order packets
+	// Test 2 drop packet
+	// Test 3 corrupt packet
+
 	changeTest(atoi(argv[3]));
 
 	saddr.sin_family = AF_INET;
@@ -24,14 +29,8 @@ int main(int argc, char *argv[])
 
 	int rdtHandle = rdt_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-	// TODO: Send data to server
-	//loop
-	//for(;;)
-	//{
-
 	rdt_sendto(rdtHandle, buffer, strlen(buffer), 0, (struct sockaddr *)&saddr, sizeof(saddr));
 
-	//}
 	rdt_close(rdtHandle);
 	return 0;
 }

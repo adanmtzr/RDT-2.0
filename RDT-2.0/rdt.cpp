@@ -198,20 +198,6 @@ int rdt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags
 
 void udt_sendto(int socket_descriptor, char *buffer, int buffer_length, int flags, struct sockaddr *destination_address, int address_length, packet *hPacket)
 {
-	/*  //simulate packet Corruption
-  time_t t;
-  int randNum;
-  // initize the random number
-  srand((unsigned) time(&t));
-
-  // random number between 0 and 1999
-  randNum = rand()%2000;
-  printf("Random number generated %d\n", randNum);
-  */
-
-	//printf("Packet segment %s", hPacket.data);
-	//printf("Packet segment %s\n", hPacket->data);
-
 	int didSend = sendto(socket_descriptor, hPacket, 512, flags, destination_address, address_length);
 	if (didSend == -1)
 	{
@@ -301,7 +287,6 @@ unsigned short checkSum(unsigned char *addr, int nBytes)
 //calculates the Checksum of the given packet
 unsigned short getCheckSum(packet cpacket)
 {
-
 	unsigned short pakCksum;
 	cpacket.len = strlen(cpacket.data);
 
